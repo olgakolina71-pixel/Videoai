@@ -87,8 +87,20 @@ function createServer(env: Env) {
       }
     },
     async () => ({
-      content: [{ type: "text", text: "Video AI is open. Describe the animation you want in chat to render it in the player." }],
-      structuredContent: { ready: true }
+      content: [{ type: "text", text: "Video AI is open. A sample project is loaded; describe the animation you want in chat to replace it." }],
+      structuredContent: {
+        ready: true,
+        project: {
+          title: "Video AI — демо",
+          duration: 5,
+          background: "#151020",
+          objects: [
+            { type: "text", text: "VIDEO AI", x: 640, y: 250, size: 88, color: "#ffffff" },
+            { type: "circle", x: 420, y: 440, radius: 42, color: "#8b5cf6", motion: { toX: 860, toY: 440, duration: 3 } },
+            { type: "text", text: "Твой проект начинается здесь", x: 640, y: 570, size: 30, color: "#c4b5fd" }
+          ]
+        }
+      }
     })
   );
 
