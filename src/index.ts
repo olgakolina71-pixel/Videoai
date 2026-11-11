@@ -1,5 +1,4 @@
-import { createMcpHandler } from "agents/mcp/server";
-import { McpServer } from "@modelcontextprotocol/server";
+import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import { OpenAIExtensions } from "@openai/mcp-extensions/server";
 import { z } from "zod";
@@ -151,7 +150,7 @@ export default {
     }
 
     if (url.pathname === "/mcp") {
-      return createMcpHandler(() => createServer(env))(request, env, ctx);
+      return createMcpHandler(() => createServer(env)).fetch(request);
     }
 
     return new Response("Not found", { status: 404 });
