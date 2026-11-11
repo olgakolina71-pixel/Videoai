@@ -1,5 +1,5 @@
-import { createMcpHandler } from "agents/mcp";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createMcpHandler } from "agents/mcp/server";
+import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 interface Env {
@@ -105,8 +105,7 @@ export default {
     }
 
     if (url.pathname === "/mcp") {
-      const server = createServer(env);
-      return createMcpHandler(server)(request, env, ctx);
+      return createMcpHandler(() => createServer(env))(request, env, ctx);
     }
 
     return new Response("Not found", { status: 404 });
