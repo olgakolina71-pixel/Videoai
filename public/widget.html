@@ -31,7 +31,10 @@ video.ready{display:block}
   <div id="status">Ожидаю данные от ChatGPT…</div>
   <video id="player" controls playsinline></video>
 </main>
-<script>
+<script type="module">
+import { App } from "https://esm.sh/@modelcontextprotocol/ext-apps@1.7.5";
+import { OpenAIExtensions } from "https://esm.sh/@openai/mcp-extensions@0.2.1/app";
+
 (() => {
   const canvas = document.querySelector("#screen");
   const ctx = canvas.getContext("2d");
@@ -176,49 +179,30 @@ video.ready{display:block}
     else if (response?.project) setProject(response.project);
   }
 
-  let rpcId = 0;
-  const pending = new Map();
-  function rpcRequest(method, params) {
-    return new Promise((resolve, reject) => {
-      const id = ++rpcId;
-      pending.set(id, {resolve, reject});
-      window.parent.postMessage({jsonrpc:"2.0", id, method, params}, "*");
-    });
-  }
-  function rpcNotify(method, params) {
-    window.parent.postMessage({jsonrpc:"2.0", method, params}, "*");
-  }
+  const app = new App({ name: "video-ai-player", version: "1.1.0" });
+  new OpenAIExtensions(app);
 
-  window.addEventListener("message", event => {
-    if (event.source !== window.parent) return;
-    const message = event.data;
-    if (!message || message.jsonrpc !== "2.0") return;
-    if (typeof message.id === "number") {
-      const request = pending.get(message.id);
-      if (!request) return;
-      pending.delete(message.id);
-      if (message.error) request.reject(message.error);
-      else request.resolve(message.result);
+  app.ontoolresult = result => {
+    if (result?.isError) {
+      statusEl.textContent = "Не удалось получить проект от Video AI.";
       return;
     }
-    if (message.method === "ui/notifications/tool-result") {
-      updateFromResponse(message.params);
-    }
-  });
+    updateFromResponse(result);
+  };
 
-  (async () => {
-    try {
-      await rpcRequest("ui/initialize", {
-        appInfo:{name:"video-ai-player",version:"1.0.0"},
-        appCapabilities:{},
-        protocolVersion:"2026-01-26"
-      });
-      rpcNotify("ui/notifications/initialized", {});
-      statusEl.textContent = "Плеер подключён. Жду видео от ChatGPT…";
-    } catch (error) {
-      statusEl.textContent = "Плеер открыт. Ожидаю вызов инструмента Video AI…";
-    }
-  })();
+  app.onhostcontextchanged = context => {
+    if (context?.theme) document.documentElement.dataset.theme = context.theme;
+  };
+
+  app.connect()
+    .then(() => {
+      statusEl.textContent = project
+        ? "Плеер подключён · проект готов"
+        : "Плеер подключён. Опиши видео в чате, чтобы создать проект.";
+    })
+    .catch(error => {
+      statusEl.textContent = "Не удалось подключиться к ChatGPT: " + (error?.message || "ошибка соединения");
+    });
 })();
 </script>
 </body>
