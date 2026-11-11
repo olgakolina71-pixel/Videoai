@@ -47,12 +47,12 @@ function createServer(env: Env) {
 
   server.registerResource(
     "video-player",
-    "ui://widget/video.html",
+    "ui://widget/video-v2.html",
     {},
     async () => ({
       contents: [{
-        uri: "ui://widget/video.html",
-        mimeType: "text/html+skybridge",
+        uri: "ui://widget/video-v2.html",
+        mimeType: "text/html;profile=mcp-app",
         text: await getWidgetHtml(env)
       }]
     })
@@ -68,8 +68,8 @@ function createServer(env: Env) {
       },
       annotations: { readOnlyHint: true },
       _meta: {
-        ui: { resourceUri: "ui://widget/video.html" },
-        "openai/outputTemplate": "ui://widget/video.html",
+        ui: { resourceUri: "ui://widget/video-v2.html" },
+        "openai/outputTemplate": "ui://widget/video-v2.html",
         "openai/toolInvocation/invoking": "Создаю видео",
         "openai/toolInvocation/invoked": "Видео готово к просмотру"
       }
