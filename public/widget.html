@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Video AI Player</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;padding:12px;background:transparent;color:var(--color-text-primary,#f5f5ff);font:14px system-ui,sans-serif}
+main{max-width:100%;margin:auto}
+h2{font-size:16px;margin:0 0 10px}
+canvas{display:block;width:100%;aspect-ratio:16/9;background:#111;border-radius:12px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+button,a{border:0;border-radius:9px;padding:9px 13px;background:#7257e8;color:white;font-weight:600;text-decoration:none;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}
+#status{opacity:.75;font-size:12px;min-height:18px}
+video{display:none;width:100%;margin-top:10px;border-radius:12px;background:#000}
+video.ready{display:block}
+</style>
+</head>
+<body>
+<main>
+  <h2 id="title">Video AI — ожидаю проект…</h2>
+  <canvas id="screen" width="1280" height="720"></canvas>
+  <div class="controls">
+    <button id="play">▶ Воспроизвести</button>
+    <button id="record">Создать видео WebM</button>
+    <a id="download" hidden download="video-ai.webm">Скачать WebM</a>
+  </div>
+  <div id="status">Ожидаю данные от ChatGPT…</div>
+  <video id="player" controls playsinline></video>
+</main>
+<script>
+(() => {
+  const canvas = document.querySelector("#screen");
+  const ctx = canvas.getContext("2d");
+  const titleEl = document.querySelector("#title");
+  const statusEl = document.querySelector("#status");
+  const playBtn = document.querySelector("#play");
+  const recordBtn = document.querySelector("#record");
+  const video = document.querySelector("#player");
+  const download = document.querySelector("#download");
+
+  let project = null;
+  let frame = 0;
+  let raf = 0;
+  let startedAt = 0;
+  let recording = false;
+
+  function positionAt(object, seconds) {
+    let x = object.x ?? 640;
+    let y = object.y ?? 360;
+    const m = object.motion;
+    if (m) {
+      const start = m.start ?? 0;
+      const duration = m.duration ?? 2;
+      const p = Math.max(0, Math.min(1, (seconds - start) / duration));
+      const eased = 1 - Math.pow(1 - p, 3);
+      x += (m.toX - x) * eased;
+      y += (m.toY - y) * eased;
+    }
+    return {x, y};
+  }
+
+  function draw(seconds = 0) {
+    if (!project) return;
+    ctx.fillStyle = project.background || "#151020";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    for (const o of project.objects || []) {
+      const p = positionAt(o, seconds);
+      ctx.fillStyle = o.color || "#ffffff";
+      if (o.type === "text") {
+        ctx.font = "700 " + (o.size || 64) + "px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(o.text || "", p.x, p.y, 1100);
+      } else if (o.type === "rect") {
+        ctx.fillRect(p.x, p.y, o.width || 120, o.height || 80);
+      } else if (o.type === "circle") {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, o.radius || 45, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function stop() {
+    cancelAnimationFrame(raf);
+    raf = 0;
+    playBtn.textContent = "▶ Воспроизвести";
+  }
+
+  function play() {
+    if (!project) return;
+    stop();
+    startedAt = performance.now();
+    playBtn.textContent = "Ⅱ Пауза";
+    const tick = now => {
+      const t = Math.min(project.duration, (now - startedAt) / 1000);
+      draw(t);
+      if (t < project.duration) raf = requestAnimationFrame(tick);
+      else stop();
+    };
+    raf = requestAnimationFrame(tick);
+  }
+
+  function setProject(value) {
+    if (!value || !Array.isArray(value.objects)) return;
+    stop();
+    project = value;
+    titleEl.textContent = project.title || "Video AI";
+    draw(0);
+    statusEl.textContent = "Проект загружен · " + project.duration + " сек.";
+    video.classList.remove("ready");
+    video.removeAttribute("src");
+    download.hidden = true;
+  }
+
+  async function makeWebM() {
+    if (!project || recording) return;
+    if (!canvas.captureStream || !window.MediaRecorder) {
+      statusEl.textContent = "В этом окне браузер не поддерживает экспорт WebM.";
+      return;
+    }
+    recording = true;
+    recordBtn.disabled = true;
+    stop();
+    const stream = canvas.captureStream(30);
+    const chunks = [];
+    let recorder;
+    try {
+      const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+        ? "video/webm;codecs=vp9" : "video/webm";
+      recorder = new MediaRecorder(stream, {mimeType:mime});
+      recorder.ondataavailable = event => {
+        if (event.data && event.data.size) chunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, {type:"video/webm"});
+        const url = URL.createObjectURL(blob);
+        video.src = url;
+        video.classList.add("ready");
+        download.href = url;
+        download.hidden = false;
+        statusEl.textContent = "WebM готов. Его можно посмотреть здесь.";
+        stream.getTracks().forEach(track => track.stop());
+        recording = false;
+        recordBtn.disabled = false;
+      };
+      recorder.start();
+      const start = performance.now();
+      const renderFrame = now => {
+        const t = Math.min(project.duration, (now - start) / 1000);
+        draw(t);
+        if (t < project.duration) requestAnimationFrame(renderFrame);
+        else recorder.stop();
+      };
+      draw(0);
+      requestAnimationFrame(renderFrame);
+      statusEl.textContent = "Рендерю WebM…";
+    } catch (error) {
+      stream.getTracks().forEach(track => track.stop());
+      recording = false;
+      recordBtn.disabled = false;
+      statusEl.textContent = "Не удалось создать WebM: " + error.message;
+    }
+  }
+
+  playBtn.addEventListener("click", () => raf ? stop() : play());
+  recordBtn.addEventListener("click", makeWebM);
+
+  function updateFromResponse(response) {
+    const data = response?.structuredContent || response?.result?.structuredContent;
+    if (data?.project) setProject(data.project);
+    else if (response?.project) setProject(response.project);
+  }
+
+  let rpcId = 0;
+  const pending = new Map();
+  function rpcRequest(method, params) {
+    return new Promise((resolve, reject) => {
+      const id = ++rpcId;
+      pending.set(id, {resolve, reject});
+      window.parent.postMessage({jsonrpc:"2.0", id, method, params}, "*");
+    });
+  }
+  function rpcNotify(method, params) {
+    window.parent.postMessage({jsonrpc:"2.0", method, params}, "*");
+  }
+
+  window.addEventListener("message", event => {
+    if (event.source !== window.parent) return;
+    const message = event.data;
+    if (!message || message.jsonrpc !== "2.0") return;
+    if (typeof message.id === "number") {
+      const request = pending.get(message.id);
+      if (!request) return;
+      pending.delete(message.id);
+      if (message.error) request.reject(message.error);
+      else request.resolve(message.result);
+      return;
+    }
+    if (message.method === "ui/notifications/tool-result") {
+      updateFromResponse(message.params);
+    }
+  });
+
+  (async () => {
+    try {
+      await rpcRequest("ui/initialize", {
+        appInfo:{name:"video-ai-player",version:"1.0.0"},
+        appCapabilities:{},
+        protocolVersion:"2026-01-26"
+      });
+      rpcNotify("ui/notifications/initialized", {});
+      statusEl.textContent = "Плеер подключён. Жду видео от ChatGPT…";
+    } catch (error) {
+      statusEl.textContent = "Плеер открыт. Ожидаю вызов инструмента Video AI…";
+    }
+  })();
+})();
+</script>
+</body>
+</html>
