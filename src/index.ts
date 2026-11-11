@@ -1,10 +1,14 @@
 import { createMcpHandler } from "agents/mcp/server";
 import { McpServer } from "@modelcontextprotocol/server";
+import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from "@modelcontextprotocol/ext-apps/server";
+import { OpenAIExtensions } from "@openai/mcp-extensions/server";
 import { z } from "zod";
 
 interface Env {
   ASSETS: Fetcher;
 }
+
+const UI_URI = "ui://widget/video-v2.html";
 
 const motionSchema = z.object({
   toX: z.number(),
@@ -42,34 +46,64 @@ async function getWidgetHtml(env: Env): Promise<string> {
 function createServer(env: Env) {
   const server = new McpServer({
     name: "video-ai",
-    version: "1.0.0"
+    version: "1.1.0"
   });
 
-  server.registerResource(
-    "video-player",
-    "ui://widget/video-v2.html",
-    {},
+  // Advertise the OpenAI extension capabilities used by the Android-capable
+  // global/thread entrypoints. Keep the existing MCP app resource and tools.
+  new OpenAIExtensions(server);
+
+  registerAppResource(server, "video-player", UI_URI, {}, async () => ({
+    contents: [{
+      uri: UI_URI,
+      mimeType: RESOURCE_MIME_TYPE,
+      text: await getWidgetHtml(env),
+      _meta: {
+        "openai/ui": {
+          availableDisplayModes: ["inline", "fullscreen"],
+          preferredDisplayMode: "inline"
+        }
+      }
+    }]
+  }));
+
+  // Explicit launcher: global and thread entrypoints are listed as supported
+  // on Android in the OpenAI MCP Extensions platform matrix.
+  registerAppTool(
+    server,
+    "open_video_ai",
+    {
+      title: "Open Video AI",
+      description: "Open the Video AI editor and preview. This launcher accepts no arguments.",
+      inputSchema: z.object({}),
+      _meta: {
+        ui: { resourceUri: UI_URI, visibility: ["app"] },
+        "openai/ui": {
+          entrypoints: [
+            { type: "global" },
+            { type: "thread" }
+          ]
+        }
+      }
+    },
     async () => ({
-      contents: [{
-        uri: "ui://widget/video-v2.html",
-        mimeType: "text/html;profile=mcp-app",
-        text: await getWidgetHtml(env)
-      }]
+      content: [{ type: "text", text: "Video AI is open. Describe the animation you want in chat to render it in the player." }],
+      structuredContent: { ready: true }
     })
   );
 
-  server.registerTool(
+  // Preserve the original tool and its inline preview behavior for desktop/web.
+  registerAppTool(
+    server,
     "render_video_inline",
     {
       title: "Create and show a video",
-      description: "Render an animated video project and show its playable preview directly inside the ChatGPT conversation. Build the project from the user's description; use a sequence of scenes represented by text, rectangles and circles, with motion keyframes. Use 16:9 unless the user asks for another ratio.",
-      inputSchema: {
-        project: projectSchema
-      },
+      description: "Render an animated video project and show its playable preview. Build the project from the user's description using text, rectangles and circles with simple position motion. Use 16:9 unless the user asks for another ratio.",
+      inputSchema: z.object({ project: projectSchema }),
       annotations: { readOnlyHint: true },
       _meta: {
-        ui: { resourceUri: "ui://widget/video-v2.html" },
-        "openai/outputTemplate": "ui://widget/video-v2.html",
+        ui: { resourceUri: UI_URI },
+        "openai/outputTemplate": UI_URI,
         "openai/toolInvocation/invoking": "Создаю видео",
         "openai/toolInvocation/invoked": "Видео готово к просмотру"
       }
@@ -79,7 +113,7 @@ function createServer(env: Env) {
       return {
         content: [{
           type: "text",
-          text: `Видео «${parsed.title}» подготовлено. Предпросмотр и видеоплеер находятся прямо в окне Video AI.`
+          text: `Видео «${parsed.title}» подготовлено. Предпросмотр и видеоплеер находятся в окне Video AI.`
         }],
         structuredContent: { project: parsed }
       };
@@ -101,7 +135,7 @@ export default {
     }
 
     if (url.pathname === "/health") {
-      return Response.json({ ok: true, app: "Video AI", version: "1.0.0" });
+      return Response.json({ ok: true, app: "Video AI", version: "1.1.0" });
     }
 
     if (url.pathname === "/mcp") {
