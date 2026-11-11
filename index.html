@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Video AI Renderer</title>
+<style>
+body{margin:0;padding:20px;background:#11121b;color:#f5f5ff;font:16px Arial;max-width:1100px;margin:auto}
+main{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+section{background:#1d2030;padding:14px;border-radius:12px}
+canvas{width:100%;background:#090a10;border-radius:8px}
+textarea{width:100%;height:340px;background:#0c0e17;color:#e9e9ff;border:1px solid #454963;border-radius:8px;padding:8px;box-sizing:border-box}
+button{padding:10px 14px;margin:5px;background:#7056e8;color:white;border:0;border-radius:8px}
+@media(max-width:700px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>Video AI Renderer</h1>
+<p>JSON-сцены · предпросмотр · экспорт WebM</p>
+<main>
+<section>
+<canvas id="view" width="1280" height="720"></canvas>
+<button id="play">▶ Воспроизвести</button><button id="reset">Сначала</button><button id="export">Экспорт WebM</button>
+<p id="status">Готово</p><a id="download" hidden download="video-ai.webm">Скачать видео</a>
+</section>
+<section>
+<button id="apply">Применить JSON</button><textarea id="json" spellcheck="false"></textarea>
+</section>
+</main>
+<script>
+const example={duration:8,background:"#151020",objects:[{type:"text",text:"VIDEO AI",x:640,y:330,size:90,color:"#ffffff"},{type:"circle",x:180,y:160,radius:55,color:"#7957ed"},{type:"rect",x:900,y:460,width:220,height:90,color:"#ed5d91"}]};
+const c=document.querySelector("#view"),x=c.getContext("2d"),j=document.querySelector("#json"),s=document.querySelector("#status");
+let scene=example,t=0,timer=null;
+j.value=JSON.stringify(example,null,2);
+function draw(time=0){x.fillStyle=scene.background||"#111";x.fillRect(0,0,1280,720);for(const o of scene.objects||[]){x.fillStyle=o.color||"#fff";if(o.type==="text"){x.font="bold "+(o.size||48)+"px Arial";x.textAlign="center";x.fillText(o.text||"",o.x??640,o.y??360)}else if(o.type==="rect"){x.fillRect(o.x||0,o.y||0,o.width||100,o.height||100)}else if(o.type==="circle"){x.beginPath();x.arc(o.x||640,o.y||360,o.radius||40,0,Math.PI*2);x.fill()}}}
+function stop(){if(timer)clearInterval(timer);timer=null}
+document.querySelector("#apply").onclick=()=>{try{stop();const v=JSON.parse(j.value);if(!Array.isArray(v.objects)||!Number.isFinite(v.duration)||v.duration<0||v.duration>600)throw Error("Проверь duration (0–600) и objects");scene=v;t=0;draw(0);s.textContent="JSON применён"}catch(e){s.textContent="Ошибка: "+e.message}};
+document.querySelector("#play").onclick=()=>{stop();const began=performance.now()-t*1000;timer=setInterval(()=>{t=Math.min(scene.duration,(performance.now()-began)/1000);draw(t);if(t>=scene.duration)stop()},33)};
+document.querySelector("#reset").onclick=()=>{stop();t=0;draw(0)};
+document.querySelector("#export").onclick=()=>{if(!c.captureStream||!window.MediaRecorder){s.textContent="WebM export не поддерживается";return}stop();const stream=c.captureStream(30),chunks=[],rec=new MediaRecorder(stream);rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};rec.onstop=()=>{const a=document.querySelector("#download"),url=URL.createObjectURL(new Blob(chunks,{type:"video/webm"}));a.href=url;a.hidden=false;s.textContent="Видео готово";stream.getTracks().forEach(q=>q.stop())};rec.start();let frame=0;const total=Math.ceil(scene.duration*30);const id=setInterval(()=>{draw(frame/30);frame++;if(frame>total){clearInterval(id);rec.stop()}},1000/30);s.textContent="Запись видео…"};
+draw(0);
+</script>
+</body>
+</html>
