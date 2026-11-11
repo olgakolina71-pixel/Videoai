@@ -9,10 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "agents": "^0.33.0",
     "zod": "^4.2.0",
     "@modelcontextprotocol/server": "2.4.0",
-    "@modelcontextprotocol/ext-apps": "^1.7.5",
+    "@modelcontextprotocol/ext-apps": "2.0.4",
     "@openai/mcp-extensions": "^0.2.1"
   },
   "devDependencies": {
